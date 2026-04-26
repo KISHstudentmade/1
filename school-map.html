@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>학교 지도</title>
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body { font-family:'Pretendard','Noto Sans KR',sans-serif; background:linear-gradient(145deg,#0f1923,#1a2a3a,#0d1b2a); color:#e0e6ed; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+.header { padding:12px 16px 8px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #ffffff10; background:#0f192380; backdrop-filter:blur(20px); flex-shrink:0; z-index:10; }
+.header h1 { font-size:18px; font-weight:800; letter-spacing:-0.5px; background:linear-gradient(135deg,#4A90D9,#7B61FF); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.header p { font-size:10px; color:#8899aa; margin-top:2px; }
+.search-btn { background:#ffffff12; border:none; border-radius:10px; padding:8px 14px; color:#fff; font-size:14px; cursor:pointer; display:flex; align-items:center; gap:6px; }
+.search-btn.active { background:#4A90D9; }
+.search-btn span { font-size:12px; }
+
+.search-panel { padding:10px 16px; background:#13222f; border-bottom:1px solid #ffffff10; display:none; z-index:9; flex-shrink:0; }
+.search-panel.show { display:block; }
+.search-panel input { width:100%; padding:10px 14px; background:#1a2d3d; border:1px solid #ffffff15; border-radius:10px; color:#fff; font-size:14px; outline:none; font-family:inherit; }
+.search-results { max-height:200px; overflow-y:auto; margin-top:8px; border-radius:10px; background:#1a2d3d; border:1px solid #ffffff10; }
+.search-results:empty { display:none; }
+.search-item { padding:10px 14px; cursor:pointer; border-bottom:1px solid #ffffff08; display:flex; align-items:center; gap:10px; font-size:13px; }
+.search-item:hover { background:#ffffff08; }
+.search-item .icon { font-size:16px; }
+.search-item .name { font-weight:600; }
+.search-item .loc { font-size:11px; color:#6b7c8d; }
+.no-result { font-size:12px; color:#6b7c8d; text-align:center; padding:12px; display:none; }
+
+.building-tabs { display:flex; padding:10px 16px 0; gap:8px; flex-shrink:0; }
+.building-tab { flex:1; padding:10px; background:#ffffff08; border:1px solid #ffffff12; border-radius:12px; color:#8899aa; font-weight:500; font-size:14px; cursor:pointer; font-family:inherit; transition:all .25s; }
+.building-tab.active { background:linear-gradient(135deg,#4A90D9,#5a6fd9); border:none; color:#fff; font-weight:700; }
+.building-tab small { display:block; font-size:9px; margin-top:2px; opacity:.7; font-weight:400; }
+
+.floor-tabs { display:flex; padding:10px 16px; gap:6px; overflow-x:auto; flex-shrink:0; }
+.floor-tab { padding:7px 16px; background:#ffffff08; border:1px solid #ffffff12; border-radius:20px; color:#8899aa; font-weight:400; font-size:13px; cursor:pointer; white-space:nowrap; flex-shrink:0; transition:all .2s; font-family:inherit; }
+.floor-tab.active { background:#7B61FF; border-color:#7B61FF; color:#fff; font-weight:700; }
+
+.map-area { flex:1; position:relative; overflow:hidden; margin:0 12px 8px; border-radius:16px; background:#0d1820; border:1px solid #ffffff10; touch-action:none; }
+.map-area svg { width:100%; height:100%; transition:transform .2s ease; }
+.map-area svg.dragging { transition:none; }
+
+.room-rect { cursor:pointer; transition:all .2s; }
+.room-rect:hover { filter:brightness(1.3); }
+
+.zoom-controls { position:absolute; bottom:14px; right:14px; display:flex; flex-direction:column; gap:6px; z-index:5; }
+.zoom-btn { width:36px; height:36px; border-radius:10px; background:#1a2d3d; border:1px solid #ffffff15; color:#c0d0e0; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-family:inherit; }
+.zoom-btn:active { background:#2a3d4d; }
+
+.floor-label { position:absolute; top:14px; left:14px; background:#0f192390; backdrop-filter:blur(10px); border-radius:10px; padding:6px 12px; font-size:12px; font-weight:600; color:#8899aa; border:1px solid #ffffff10; z-index:5; }
+
+.info-panel { position:absolute; bottom:0; left:0; right:0; background:linear-gradient(to top,#13222ffa,#13222ff0); backdrop-filter:blur(20px); border-radius:20px 20px 0 0; padding:20px; z-index:20; transform:translateY(100%); transition:transform .3s ease; }
+.info-panel.show { transform:translateY(0); }
+.info-top { display:flex; justify-content:space-between; align-items:flex-start; }
+.info-icon { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; }
+.info-name { font-size:17px; font-weight:700; }
+.info-loc { font-size:12px; color:#6b7c8d; margin-top:3px; }
+.info-desc { font-size:13px; color:#8899aa; margin-top:12px; line-height:1.5; }
+.close-btn { background:#ffffff10; border:none; border-radius:8px; width:32px; height:32px; color:#8899aa; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+
+.legend { display:flex; flex-wrap:wrap; gap:6px 12px; padding:4px 16px 10px; justify-content:center; flex-shrink:0; }
+.legend-item { display:flex; align-items:center; gap:4px; font-size:10px; color:#6b7c8d; }
+.legend-dot { width:8px; height:8px; border-radius:2px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>🏫 학교 지도</h1>
+    <p>2026학년도 층별 배치도</p>
+  </div>
+  <button class="search-btn" id="searchToggle" onclick="toggleSearch()">🔍 <span>검색</span></button>
+</div>
+
+<div class="search-panel" id="searchPanel">
+  <input type="text" id="searchInput" placeholder="교실 이름 또는 번호 검색 (예: 7-3, 도서관)" oninput="doSearch(this.value)">
+  <div class="search-results" id="searchResults"></div>
+  <div class="no-result" id="noResult">검색 결과가 없습니다</div>
+</div>
+
+<div class="building-tabs" id="buildingTabs"></div>
+<div class="floor-tabs" id="floorTabs"></div>
+
+<div class="map-area" id="mapArea">
+  <svg id="mapSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="floor-label" id="floorLabel"></div>
+  <div class="zoom-controls">
+    <button class="zoom-btn" onclick="zoomIn()">+</button>
+    <button class="zoom-btn" onclick="resetView()" style="font-size:12px">↺</button>
+    <button class="zoom-btn" onclick="zoomOut()">−</button>
+  </div>
+</div>
+
+<div class="info-panel" id="infoPanel">
+  <div class="info-top">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="info-icon" id="infoIcon"></div>
+      <div>
+        <div class="info-name" id="infoName"></div>
+        <div class="info-loc" id="infoLoc"></div>
+      </div>
+    </div>
+    <button class="close-btn" onclick="closeInfo()">✕</button>
+  </div>
+  <div class="info-desc" id="infoDesc">설명이 아직 등록되지 않았습니다.</div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#4A90D9"></div>교실</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#E8A838"></div>교무실/행정</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#7B61FF"></div>특별실</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#50B87D"></div>편의시설</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#E85D75"></div>체육시설</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#8E9AAF"></div>기타시설</div>
+</div>
+
+<script>
+const TYPES = {
+  classroom:{color:"#4A90D9",icon:"📚",label:"교실"},
+  office:{color:"#E8A838",icon:"🏢",label:"교무실/행정"},
+  special:{color:"#7B61FF",icon:"🔬",label:"특별실"},
+  facility:{color:"#50B87D",icon:"🏫",label:"편의시설"},
+  gym:{color:"#E85D75",icon:"🏃",label:"체육시설"},
+  utility:{color:"#8E9AAF",icon:"🔧",label:"기타시설"}
+};
+
+const DATA = {
+  "본관":{nameVi:"Tòa nhà chính",floors:[
+    {floor:1,label:"1층",vb:"-2 -2 110 130",rooms:[
+      {id:"1-5",x:5,y:5,w:11,h:14,type:"classroom",label:"1-5"},
+      {id:"1-4",x:17,y:5,w:11,h:14,type:"classroom",label:"1-4"},
+      {id:"1-3",x:29,y:5,w:11,h:14,type:"classroom",label:"1-3"},
+      {id:"1-2",x:41,y:5,w:11,h:14,type:"classroom",label:"1-2"},
+      {id:"1-1",x:41,y:28,w:11,h:14,type:"classroom",label:"1-1"},
+      {id:"er1",x:53,y:5,w:9,h:14,type:"office",label:"초등\n연구실1"},
+      {id:"cook",x:63,y:2,w:14,h:17,type:"facility",label:"조리실"},
+      {id:"cafe1",x:63,y:20,w:14,h:14,type:"facility",label:"식당"},
+      {id:"sky",x:82,y:2,w:13,h:14,type:"gym",label:"하늘마루\n(체육장1)"},
+      {id:"sea",x:82,y:30,w:13,h:14,type:"gym",label:"바다마루\n(체육장2)"},
+      {id:"trad",x:78,y:17,w:10,h:12,type:"special",label:"전통\n음악실"},
+      {id:"pe",x:82,y:17,w:13,h:12,type:"office",label:"체육\n교사실"},
+      {id:"2-5",x:29,y:28,w:11,h:14,type:"classroom",label:"2-5"},
+      {id:"2-4",x:29,y:43,w:11,h:14,type:"classroom",label:"2-4"},
+      {id:"cctv",x:41,y:43,w:8,h:8,type:"utility",label:"CCTV"},
+      {id:"comp1",x:29,y:58,w:14,h:10,type:"special",label:"컴퓨터실"},
+      {id:"mdream",x:10,y:43,w:14,h:12,type:"special",label:"중등\n꿈나래반"},
+      {id:"edream",x:10,y:56,w:14,h:12,type:"special",label:"초등\n꿈나래반"},
+      {id:"health",x:10,y:69,w:14,h:10,type:"facility",label:"보건실"},
+      {id:"sobs",x:29,y:69,w:12,h:10,type:"office",label:"학생\n관찰실"},
+      {id:"evice",x:42,y:69,w:12,h:10,type:"office",label:"초등\n교감실"},
+      {id:"eadmin",x:42,y:80,w:12,h:10,type:"office",label:"초등\n교무실"},
+      {id:"2-3",x:17,y:80,w:11,h:14,type:"classroom",label:"2-3"},
+      {id:"2-2",x:7,y:88,w:9,h:9,type:"classroom",label:"2-2"},
+      {id:"2-1",x:5,y:98,w:9,h:9,type:"classroom",label:"2-1"},
+      {id:"st1",x:5,y:80,w:10,h:7,type:"utility",label:"창고"},
+      {id:"er2",x:17,y:69,w:11,h:10,type:"office",label:"초등\n연구실2"},
+      {id:"hun",x:5,y:69,w:12,h:10,type:"special",label:"훈민정음반"}
+    ]},
+    {floor:2,label:"2층",vb:"-2 -2 110 125",rooms:[
+      {id:"4-5",x:5,y:5,w:11,h:14,type:"classroom",label:"4-5"},
+      {id:"4-4",x:17,y:5,w:11,h:14,type:"classroom",label:"4-4"},
+      {id:"4-3",x:29,y:5,w:11,h:14,type:"classroom",label:"4-3"},
+      {id:"4-2",x:41,y:5,w:11,h:14,type:"classroom",label:"4-2"},
+      {id:"er4",x:53,y:5,w:9,h:14,type:"office",label:"초등\n연구실4"},
+      {id:"txt2",x:63,y:2,w:14,h:12,type:"utility",label:"교과서\n보관실"},
+      {id:"meal2",x:63,y:15,w:14,h:18,type:"facility",label:"급식실"},
+      {id:"store",x:82,y:2,w:13,h:12,type:"facility",label:"매점"},
+      {id:"cafe2",x:82,y:15,w:13,h:10,type:"facility",label:"카페\n테리아"},
+      {id:"uni",x:82,y:26,w:13,h:8,type:"facility",label:"교복\n판매실"},
+      {id:"4-1",x:41,y:28,w:11,h:14,type:"classroom",label:"4-1"},
+      {id:"teach",x:29,y:28,w:11,h:12,type:"office",label:"교수학습\n자료실"},
+      {id:"el5",x:41,y:43,w:12,h:10,type:"special",label:"초등영어\n레벨실5"},
+      {id:"el3",x:29,y:43,w:12,h:10,type:"special",label:"초등영어\n레벨실3"},
+      {id:"el2",x:15,y:50,w:13,h:10,type:"special",label:"초등영어\n레벨실2"},
+      {id:"el4",x:41,y:54,w:12,h:10,type:"special",label:"초등영어\n레벨실4"},
+      {id:"el1",x:15,y:61,w:13,h:10,type:"special",label:"초등영어\n레벨실1"},
+      {id:"inst",x:29,y:54,w:11,h:10,type:"special",label:"악기실"},
+      {id:"mmus",x:10,y:43,w:14,h:14,type:"special",label:"중등\n음악실"},
+      {id:"band",x:15,y:72,w:13,h:10,type:"special",label:"밴드실"},
+      {id:"3-5",x:29,y:72,w:11,h:14,type:"classroom",label:"3-5"},
+      {id:"er3",x:29,y:65,w:11,h:7,type:"office",label:"초등연구실3"},
+      {id:"vn1",x:10,y:72,w:13,h:10,type:"special",label:"초등베트남어\n레벨실1"},
+      {id:"swai",x:5,y:83,w:13,h:10,type:"special",label:"SW/AI\n체험실"},
+      {id:"3-4",x:19,y:83,w:10,h:10,type:"classroom",label:"3-4"},
+      {id:"3-3",x:10,y:94,w:10,h:8,type:"classroom",label:"3-3"},
+      {id:"3-2",x:7,y:103,w:9,h:8,type:"classroom",label:"3-2"},
+      {id:"3-1",x:5,y:112,w:9,h:8,type:"classroom",label:"3-1"}
+    ]},
+    {floor:3,label:"3층",vb:"-2 -2 110 115",rooms:[
+      {id:"5-5",x:5,y:5,w:11,h:14,type:"classroom",label:"5-5"},
+      {id:"5-4",x:17,y:5,w:11,h:14,type:"classroom",label:"5-4"},
+      {id:"5-3",x:29,y:5,w:11,h:14,type:"classroom",label:"5-3"},
+      {id:"5-2",x:41,y:5,w:11,h:14,type:"classroom",label:"5-2"},
+      {id:"er5",x:53,y:5,w:9,h:14,type:"office",label:"초등\n연구실5"},
+      {id:"txt3",x:63,y:2,w:12,h:12,type:"utility",label:"교과서\n보관실"},
+      {id:"7-4",x:63,y:15,w:10,h:14,type:"classroom",label:"7-4"},
+      {id:"7-5",x:74,y:15,w:10,h:14,type:"classroom",label:"7-5"},
+      {id:"g7",x:85,y:5,w:10,h:14,type:"office",label:"7학년부"},
+      {id:"gym3",x:85,y:20,w:13,h:18,type:"gym",label:"체육관"},
+      {id:"mcoun",x:50,y:28,w:12,h:12,type:"office",label:"중등\n상담실"},
+      {id:"7-1",x:63,y:30,w:10,h:14,type:"classroom",label:"7-1"},
+      {id:"7-2",x:74,y:30,w:10,h:14,type:"classroom",label:"7-2"},
+      {id:"7-3",x:85,y:30,w:10,h:14,type:"classroom",label:"7-3"},
+      {id:"intl",x:20,y:43,w:14,h:10,type:"office",label:"국제교류부"},
+      {id:"5-1",x:35,y:35,w:11,h:14,type:"classroom",label:"5-1"},
+      {id:"st3",x:20,y:54,w:12,h:8,type:"utility",label:"창고"},
+      {id:"vn2",x:29,y:50,w:13,h:12,type:"special",label:"초등배어\n레벨실2"},
+      {id:"hall",x:10,y:55,w:18,h:22,type:"gym",label:"꿈나래홀\n(강당)"},
+      {id:"madm",x:30,y:63,w:14,h:10,type:"office",label:"중등교무실\n(교무,과정)"},
+      {id:"grd",x:30,y:74,w:12,h:8,type:"office",label:"성적\n처리실"},
+      {id:"edur",x:15,y:78,w:14,h:8,type:"office",label:"교육연구부"},
+      {id:"hlvl",x:25,y:78,w:14,h:10,type:"special",label:"고등레벨실"},
+      {id:"welf",x:5,y:85,w:14,h:8,type:"office",label:"학생복지부"},
+      {id:"8-1",x:12,y:94,w:10,h:10,type:"classroom",label:"8-1"},
+      {id:"8-2",x:7,y:105,w:10,h:10,type:"classroom",label:"8-2"},
+      {id:"ramp",x:25,y:90,w:12,h:8,type:"facility",label:"신관\n연결램프"}
+    ]},
+    {floor:4,label:"4층",vb:"-2 -2 110 135",rooms:[
+      {id:"6-6",x:5,y:5,w:11,h:14,type:"classroom",label:"6-6"},
+      {id:"6-5",x:17,y:5,w:11,h:14,type:"classroom",label:"6-5"},
+      {id:"6-4",x:29,y:5,w:11,h:14,type:"classroom",label:"6-4"},
+      {id:"6-3",x:41,y:5,w:11,h:14,type:"classroom",label:"6-3"},
+      {id:"er6",x:53,y:5,w:9,h:14,type:"office",label:"초등\n연구실6"},
+      {id:"lib",x:70,y:5,w:16,h:16,type:"facility",label:"도서관"},
+      {id:"ping",x:87,y:5,w:10,h:16,type:"gym",label:"체육장\n(탁구)"},
+      {id:"arch",x:87,y:22,w:10,h:10,type:"utility",label:"서고"},
+      {id:"6-2",x:41,y:28,w:12,h:14,type:"classroom",label:"6-2"},
+      {id:"ecoun",x:29,y:35,w:11,h:10,type:"office",label:"초등\n상담실"},
+      {id:"6-1",x:41,y:43,w:12,h:12,type:"classroom",label:"6-1"},
+      {id:"edeb",x:35,y:50,w:14,h:12,type:"special",label:"중등영어\n토론실"},
+      {id:"ened",x:25,y:63,w:14,h:10,type:"office",label:"영어교육부"},
+      {id:"g8",x:25,y:74,w:12,h:10,type:"office",label:"8학년부"},
+      {id:"mlvl",x:10,y:74,w:14,h:10,type:"special",label:"중등레벨실"},
+      {id:"sc1",x:5,y:85,w:12,h:8,type:"office",label:"학생부\n상담실1"},
+      {id:"8-6",x:20,y:85,w:10,h:10,type:"classroom",label:"8-6"},
+      {id:"8-5",x:15,y:96,w:10,h:10,type:"classroom",label:"8-5"},
+      {id:"8-4",x:10,y:107,w:10,h:10,type:"classroom",label:"8-4"},
+      {id:"8-3",x:5,y:118,w:10,h:10,type:"classroom",label:"8-3"}
+    ]},
+    {floor:5,label:"5층",vb:"-2 -2 100 135",rooms:[
+      {id:"eeo",x:5,y:5,w:14,h:14,type:"office",label:"초등영어\n교무실"},
+      {id:"multi",x:20,y:5,w:14,h:14,type:"facility",label:"다목적실"},
+      {id:"emus",x:35,y:5,w:12,h:14,type:"special",label:"초등\n음악실"},
+      {id:"mlis",x:75,y:2,w:14,h:14,type:"special",label:"음악\n감상실"},
+      {id:"golf",x:75,y:17,w:14,h:14,type:"gym",label:"골프\n연습장"},
+      {id:"ms2",x:50,y:20,w:14,h:14,type:"special",label:"중등\n과학실2"},
+      {id:"ms3",x:35,y:30,w:13,h:12,type:"special",label:"중등\n과학실3"},
+      {id:"sp1",x:50,y:35,w:10,h:10,type:"utility",label:"과학\n준비실"},
+      {id:"jan",x:30,y:43,w:12,h:10,type:"utility",label:"미화원\n휴게실"},
+      {id:"ms1",x:42,y:43,w:14,h:14,type:"special",label:"중등\n과학실1"},
+      {id:"es2",x:30,y:58,w:14,h:12,type:"special",label:"초등\n과학실2"},
+      {id:"es1",x:22,y:71,w:14,h:12,type:"special",label:"초등\n과학실1"},
+      {id:"sp2",x:18,y:84,w:10,h:8,type:"utility",label:"과학\n준비실"},
+      {id:"fr",x:10,y:78,w:12,h:10,type:"utility",label:"여직원\n휴게실"},
+      {id:"mr",x:5,y:89,w:12,h:8,type:"utility",label:"남직원\n휴게실"},
+      {id:"el6",x:10,y:98,w:14,h:10,type:"special",label:"초등영어\n레벨실6"},
+      {id:"mart",x:5,y:109,w:12,h:10,type:"special",label:"중등\n미술실"},
+      {id:"ap",x:5,y:120,w:10,h:8,type:"utility",label:"미술\n준비실"}
+    ]}
+  ]},
+  "신관":{nameVi:"Tòa nhà mới",floors:[
+    {floor:1,label:"1층",vb:"-2 -2 108 70",rooms:[
+      {id:"nlob",x:5,y:20,w:15,h:25,type:"facility",label:"로비"},
+      {id:"nelc",x:2,y:48,w:12,h:14,type:"utility",label:"배전실"},
+      {id:"nhis",x:20,y:10,w:8,h:30,type:"special",label:"역사관"},
+      {id:"nciv",x:30,y:10,w:16,h:18,type:"office",label:"민원실"},
+      {id:"nadm",x:50,y:5,w:18,h:18,type:"office",label:"행정실"},
+      {id:"npri",x:72,y:5,w:16,h:18,type:"office",label:"교장실"},
+      {id:"nsm1",x:30,y:38,w:14,h:14,type:"facility",label:"소회의실1"},
+      {id:"nsm2",x:45,y:38,w:14,h:14,type:"facility",label:"소회의실2"},
+      {id:"nvnt",x:60,y:30,w:14,h:18,type:"office",label:"초등\n베트남어\n교사실"},
+      {id:"nbig",x:75,y:30,w:16,h:18,type:"facility",label:"대회의실"},
+      {id:"nst1",x:82,y:50,w:9,h:10,type:"utility",label:"창고"},
+      {id:"nprt",x:92,y:45,w:8,h:15,type:"utility",label:"인쇄실"}
+    ]},
+    {floor:2,label:"2층",vb:"-2 -2 108 62",rooms:[
+      {id:"nsrv",x:2,y:40,w:12,h:14,type:"utility",label:"서버실"},
+      {id:"ncco",x:10,y:40,w:14,h:14,type:"office",label:"진학\n상담실"},
+      {id:"9-5",x:25,y:40,w:14,h:14,type:"classroom",label:"9-5"},
+      {id:"9-6",x:40,y:40,w:14,h:14,type:"classroom",label:"9-6"},
+      {id:"ncom",x:30,y:5,w:16,h:18,type:"special",label:"컴퓨터실"},
+      {id:"ncol",x:48,y:5,w:14,h:18,type:"office",label:"진학부"},
+      {id:"12-1",x:64,y:5,w:14,h:18,type:"classroom",label:"12-1"},
+      {id:"12-2",x:80,y:5,w:14,h:18,type:"classroom",label:"12-2"},
+      {id:"12-5",x:55,y:40,w:14,h:14,type:"classroom",label:"12-5"},
+      {id:"12-4",x:70,y:40,w:14,h:14,type:"classroom",label:"12-4"},
+      {id:"12-3",x:85,y:40,w:14,h:14,type:"classroom",label:"12-3"}
+    ]},
+    {floor:3,label:"3층",vb:"-2 -2 115 62",rooms:[
+      {id:"nrmp",x:2,y:5,w:16,h:18,type:"facility",label:"본관\n연결램프"},
+      {id:"nbrd",x:10,y:40,w:14,h:14,type:"special",label:"방송실"},
+      {id:"9-3",x:30,y:5,w:14,h:18,type:"classroom",label:"9-3"},
+      {id:"nmvc",x:46,y:5,w:14,h:18,type:"office",label:"중등\n교감실"},
+      {id:"ng11",x:62,y:5,w:14,h:18,type:"office",label:"11학년부"},
+      {id:"11-1",x:78,y:5,w:14,h:18,type:"classroom",label:"11-1"},
+      {id:"11-2",x:93,y:5,w:14,h:18,type:"classroom",label:"11-2"},
+      {id:"9-4",x:25,y:40,w:14,h:14,type:"classroom",label:"9-4"},
+      {id:"11-6",x:40,y:40,w:14,h:14,type:"classroom",label:"11-6"},
+      {id:"11-5",x:55,y:40,w:14,h:14,type:"classroom",label:"11-5"},
+      {id:"11-4",x:70,y:40,w:14,h:14,type:"classroom",label:"11-4"},
+      {id:"11-3",x:85,y:40,w:14,h:14,type:"classroom",label:"11-3"}
+    ]},
+    {floor:4,label:"4층",vb:"-2 -2 115 62",rooms:[
+      {id:"nsc2",x:5,y:40,w:14,h:14,type:"office",label:"학생부\n상담실2"},
+      {id:"9-1",x:30,y:5,w:14,h:18,type:"classroom",label:"9-1"},
+      {id:"9-2",x:46,y:5,w:14,h:18,type:"classroom",label:"9-2"},
+      {id:"ng9",x:62,y:5,w:14,h:18,type:"office",label:"9학년부"},
+      {id:"ng10",x:78,y:5,w:14,h:18,type:"office",label:"10학년부"},
+      {id:"10-1",x:93,y:5,w:14,h:18,type:"classroom",label:"10-1"},
+      {id:"10-6",x:20,y:40,w:14,h:14,type:"classroom",label:"10-6"},
+      {id:"10-5",x:35,y:40,w:14,h:14,type:"classroom",label:"10-5"},
+      {id:"10-4",x:50,y:40,w:14,h:14,type:"classroom",label:"10-4"},
+      {id:"10-3",x:65,y:40,w:14,h:14,type:"classroom",label:"10-3"},
+      {id:"10-2",x:80,y:40,w:14,h:14,type:"classroom",label:"10-2"}
+    ]}
+  ]}
+};
+
+let curBuilding = "본관";
+let curFloorIdx = 0;
+let selectedRoom = null;
+let scale = 1, panX = 0, panY = 0;
+let isDragging = false, dragStartX = 0, dragStartY = 0;
+let lastTouchDist = 0, lastTouchScale = 1;
+
+function init() {
+  renderBuildingTabs();
+  renderFloorTabs();
+  renderMap();
+}
+
+function renderBuildingTabs() {
+  const el = document.getElementById("buildingTabs");
+  el.innerHTML = "";
+  for (const b in DATA) {
+    const btn = document.createElement("button");
+    btn.className = "building-tab" + (b === curBuilding ? " active" : "");
+    btn.innerHTML = b + "<small>" + DATA[b].nameVi + "</small>";
+    btn.onclick = () => { curBuilding = b; curFloorIdx = 0; resetState(); renderBuildingTabs(); renderFloorTabs(); renderMap(); };
+    el.appendChild(btn);
+  }
+}
+
+function renderFloorTabs() {
+  const el = document.getElementById("floorTabs");
+  el.innerHTML = "";
+  DATA[curBuilding].floors.forEach((f, i) => {
+    const btn = document.createElement("button");
+    btn.className = "floor-tab" + (i === curFloorIdx ? " active" : "");
+    btn.textContent = f.label;
+    btn.onclick = () => { curFloorIdx = i; resetState(); renderFloorTabs(); renderMap(); };
+    el.appendChild(btn);
+  });
+}
+
+function resetState() { scale = 1; panX = 0; panY = 0; selectedRoom = null; closeInfo(); }
+
+function renderMap() {
+  const svg = document.getElementById("mapSvg");
+  const floor = DATA[curBuilding].floors[curFloorIdx];
+  svg.setAttribute("viewBox", floor.vb);
+  document.getElementById("floorLabel").textContent = curBuilding + " " + floor.label;
+  updateTransform();
+
+  let html = '<defs><pattern id="grid" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M 5 0 L 0 0 0 5" fill="none" stroke="#ffffff06" stroke-width="0.1"/></pattern></defs>';
+  html += '<rect x="-10" y="-10" width="300" height="300" fill="url(#grid)"/>';
+
+  floor.rooms.forEach(r => {
+    const c = TYPES[r.type];
+    const lines = r.label.split("\n");
+    const fs = Math.min(r.w, r.h) < 10 ? 0.55 : 0.7;
+    html += `<g class="room-rect" onclick="selectRoom('${r.id}')">`;
+    html += `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="0.8" fill="${c.color}18" stroke="${c.color}" stroke-width="0.3" data-id="${r.id}"/>`;
+    lines.forEach((line, i) => {
+      const ty = r.y + r.h/2 + (i - (lines.length-1)/2) * (fs*1.4);
+      html += `<text x="${r.x+r.w/2}" y="${ty}" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-weight="500" fill="#c8d6e5" style="pointer-events:none;font-family:Pretendard,sans-serif">${line}</text>`;
+    });
+    html += '</g>';
+  });
+  svg.innerHTML = html;
+}
+
+function selectRoom(id) {
+  const floor = DATA[curBuilding].floors[curFloorIdx];
+  const room = floor.rooms.find(r => r.id === id);
+  if (!room) return;
+  selectedRoom = room;
+
+  // reset previous
+  document.querySelectorAll("#mapSvg rect[data-id]").forEach(el => {
+    const rid = el.getAttribute("data-id");
+    const rm = floor.rooms.find(r => r.id === rid);
+    if (rm) {
+      const c = TYPES[rm.type];
+      el.setAttribute("fill", c.color + "18");
+      el.setAttribute("stroke-width", "0.3");
+    }
+  });
+
+  // highlight selected
+  const rect = document.querySelector(`rect[data-id="${id}"]`);
+  if (rect) {
+    const c = TYPES[room.type];
+    rect.setAttribute("fill", c.color);
+    rect.setAttribute("stroke-width", "0.6");
+  }
+
+  const c = TYPES[room.type];
+  document.getElementById("infoIcon").textContent = c.icon;
+  document.getElementById("infoIcon").style.background = c.color + "25";
+  document.getElementById("infoName").textContent = room.label.replace(/\n/g, " ");
+  document.getElementById("infoLoc").textContent = curBuilding + " " + floor.label + " · " + c.label;
+  document.getElementById("infoPanel").style.borderTop = "2px solid " + c.color;
+  document.getElementById("infoDesc").textContent = "설명이 아직 등록되지 않았습니다.";
+  document.getElementById("infoPanel").classList.add("show");
+}
+
+function closeInfo() {
+  document.getElementById("infoPanel").classList.remove("show");
+  if (selectedRoom) {
+    const rect = document.querySelector(`rect[data-id="${selectedRoom.id}"]`);
+    if (rect) {
+      const c = TYPES[selectedRoom.type];
+      rect.setAttribute("fill", c.color + "18");
+      rect.setAttribute("stroke-width", "0.3");
+    }
+    selectedRoom = null;
+  }
+}
+
+function toggleSearch() {
+  const panel = document.getElementById("searchPanel");
+  const btn = document.getElementById("searchToggle");
+  panel.classList.toggle("show");
+  btn.classList.toggle("active");
+  if (panel.classList.contains("show")) document.getElementById("searchInput").focus();
+}
+
+function doSearch(q) {
+  const res = document.getElementById("searchResults");
+  const noRes = document.getElementById("noResult");
+  res.innerHTML = "";
+  noRes.style.display = "none";
+  if (!q.trim()) return;
+
+  const query = q.toLowerCase().replace(/\s/g, "");
+  const results = [];
+  for (const bName in DATA) {
+    DATA[bName].floors.forEach((f, fi) => {
+      f.rooms.forEach(r => {
+        const label = r.label.replace(/\n/g, "").toLowerCase().replace(/\s/g, "");
+        if (label.includes(query) || r.id.toLowerCase().includes(query)) {
+          results.push({...r, building: bName, floorLabel: f.label, floorIdx: fi});
+        }
+      });
+    });
+  }
+
+  if (results.length === 0) { noRes.style.display = "block"; return; }
+
+  results.forEach(r => {
+    const div = document.createElement("div");
+    div.className = "search-item";
+    div.innerHTML = `<span class="icon">${TYPES[r.type].icon}</span><div><div class="name">${r.label.replace(/\n/g," ")}</div><div class="loc">${r.building} ${r.floorLabel}</div></div>`;
+    div.onclick = () => {
+      curBuilding = r.building;
+      curFloorIdx = r.floorIdx;
+      renderBuildingTabs();
+      renderFloorTabs();
+      renderMap();
+      setTimeout(() => {
+        selectRoom(r.id);
+        scale = 1.5;
+        panX = -(r.x - 40) * 1.5;
+        panY = -(r.y - 20) * 1.5;
+        updateTransform();
+      }, 100);
+      document.getElementById("searchInput").value = "";
+      res.innerHTML = "";
+      document.getElementById("searchPanel").classList.remove("show");
+      document.getElementById("searchToggle").classList.remove("active");
+    };
+    res.appendChild(div);
+  });
+}
+
+function updateTransform() {
+  const svg = document.getElementById("mapSvg");
+  svg.style.transform = `scale(${scale}) translate(${panX/scale}px,${panY/scale}px)`;
+}
+
+function zoomIn() { scale = Math.min(4, scale + 0.3); updateTransform(); }
+function zoomOut() { scale = Math.max(0.5, scale - 0.3); updateTransform(); }
+function resetView() { scale = 1; panX = 0; panY = 0; updateTransform(); closeInfo(); }
+
+const mapArea = document.getElementById("mapArea");
+mapArea.addEventListener("pointerdown", e => {
+  if (e.target.closest(".zoom-btn")) return;
+  isDragging = true;
+  dragStartX = e.clientX - panX;
+  dragStartY = e.clientY - panY;
+  document.getElementById("mapSvg").classList.add("dragging");
+});
+mapArea.addEventListener("pointermove", e => {
+  if (!isDragging) return;
+  panX = e.clientX - dragStartX;
+  panY = e.clientY - dragStartY;
+  updateTransform();
+});
+mapArea.addEventListener("pointerup", () => { isDragging = false; document.getElementById("mapSvg").classList.remove("dragging"); });
+mapArea.addEventListener("pointerleave", () => { isDragging = false; document.getElementById("mapSvg").classList.remove("dragging"); });
+mapArea.addEventListener("wheel", e => { e.preventDefault(); scale = Math.min(4, Math.max(0.5, scale + (e.deltaY > 0 ? -0.15 : 0.15))); updateTransform(); }, {passive:false});
+
+mapArea.addEventListener("touchstart", e => {
+  if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    lastTouchDist = Math.hypot(dx, dy);
+    lastTouchScale = scale;
+  }
+}, {passive:true});
+mapArea.addEventListener("touchmove", e => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.hypot(dx, dy);
+    scale = Math.min(4, Math.max(0.5, lastTouchScale * (dist / lastTouchDist)));
+    updateTransform();
+  }
+}, {passive:false});
+
+init();
+</script>
+</body>
+</html>
